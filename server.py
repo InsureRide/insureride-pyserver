@@ -2,6 +2,7 @@ import socket
 import select
 import struct
 import time
+import json, requests
 from math import sqrt
 from bokeh.client import push_session
 from bokeh.driving import cosine
@@ -10,7 +11,8 @@ import threading
 
 UDP_IP = "0.0.0.0"
 UDP_PORT = 6666
-ACCEL_INTERVAL = 1 # s
+ACCEL_INTERVAL = 0.1 # s
+GET_STREAM_INTERVAL = ACCEL_INTERVAL * 1000 / 2 # ms
 NUM_STREAMED_VALS = 7 # values
 STREAMED_VAL_SIZE = 4 # bytes per value
 
@@ -26,10 +28,10 @@ drives = []
 
 # plotting
 fig_accel_time = figure(height=200, width=800, x_axis_label="time s", y_axis_label="acceleration m/s^2")
-fig_accel_time_l1 = fig_accel_time.line([i for i in range(-20, 1)], [0 for i in range(21)], color="firebrick")
+fig_accel_time_l1 = fig_accel_time.line([i/10.0 for i in range(-100, 1)], [0 for i in range(101)], color="firebrick")
 
 fig_speed_time = figure(height=200, width=800, x_axis_label="time s", y_axis_label="speed m/s")
-fig_speed_time_l1 = fig_speed_time.line([i for i in range(-20, 1)], [0 for i in range(21)], color="blue")
+fig_speed_time_l1 = fig_speed_time.line([i/10.0 for i in range(-100, 1)], [0 for i in range(101)], color="blue")
 
 session = push_session(curdoc())
 
@@ -75,6 +77,9 @@ def get_data():
     global stream_buffer
     global checkpoints
 
+    next_y_accel = fig_accel_time_l1.data_source.data["y"][-1]
+    next_y_speed = fig_speed_time_l1.data_source.data["y"][-1]
+
     try:
         buffer_size = NUM_STREAMED_VALS * STREAMED_VAL_SIZE
         data, addr = sock.recvfrom(buffer_size - len(stream_buffer))
@@ -93,11 +98,8 @@ def get_data():
             checkpoints.append(checkpoint)
             print checkpoint
 
-            fig_accel_time_l1.data_source.data["y"] = \
-                fig_accel_time_l1.data_source.data["y"][1:] + [checkpoint.accel_overall]
-
-            fig_speed_time_l1.data_source.data["y"] = \
-                fig_speed_time_l1.data_source.data["y"][1:] + [checkpoint.speed]
+            next_y_accel = checkpoint.accel_overall
+            next_y_speed = checkpoint.speed
 
             stream_buffer = ""
     except:
@@ -108,11 +110,27 @@ def get_data():
                 drives.append(drive)
                 print drive
 
+                # send the data
+                carAddress = json.loads(requests.get(url='https://insureride.net/api/v1/user').text)["1"]["CarAddress"]
+                print requests.post("https://insureride.net/api/v1/car/" + carAddress + "/drive", data = json.dumps({
+                    "Kilometers": drive.kilometers,
+                    "Avgspeed": drive.avgspeed,
+                    "Avgaccel": drive.avgaccel,
+                    "Starttime": drive.starttime,
+                    "Endtime": drive.endtime
+                })).text
+
             # clear data points
             checkpoints = []
 
+    fig_accel_time_l1.data_source.data["y"] = \
+        fig_accel_time_l1.data_source.data["y"][1:] + [next_y_accel]
+
+    fig_speed_time_l1.data_source.data["y"] = \
+        fig_speed_time_l1.data_source.data["y"][1:] + [next_y_speed]
+
 # receive streamed data
-curdoc().add_periodic_callback(get_data, 1000)
+curdoc().add_periodic_callback(get_data, GET_STREAM_INTERVAL)
 
 # open the bokeh document in a browser
 session.show(fig_accel_time)
