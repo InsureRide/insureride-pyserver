@@ -3,6 +3,9 @@ import select
 import struct
 import time
 from math import sqrt
+from bokeh.client import push_session
+from bokeh.driving import cosine
+from bokeh.plotting import figure, curdoc
 import threading
 
 UDP_IP = "0.0.0.0"
@@ -21,6 +24,15 @@ stream_buffer = ""
 checkpoints = []
 drives = []
 
+# plotting
+fig_accel_time = figure(height=200, width=800, x_axis_label="time s", y_axis_label="acceleration m/s^2")
+fig_accel_time_l1 = fig_accel_time.line([i for i in range(-20, 1)], [0 for i in range(21)], color="firebrick")
+
+fig_speed_time = figure(height=200, width=800, x_axis_label="time s", y_axis_label="speed m/s")
+fig_speed_time_l1 = fig_speed_time.line([i for i in range(-20, 1)], [0 for i in range(21)], color="blue")
+
+session = push_session(curdoc())
+
 class Checkpoint:
     def __init__(self, ride_id, geo_coord, timestamp, accel_x_mg, accel_y_mg, accel_z_mg):
         self.ride_id = ride_id
@@ -38,15 +50,15 @@ class Checkpoint:
         self.speed = self.accel_overall * ACCEL_INTERVAL
 
     def __str__(self):
-        return "[chkpt] ride_id=%d geo: n=%.2f e=%.2f ; ts=%ds accel m/s2: X=%.2f Y=%.2f Z=%.2f ; accel_overall=%.2fm/s2" % (self.ride_id, self.geo_coord[0], self.geo_coord[1], self.timestamp, self.accel_x_mps, self.accel_y_mps, self.accel_z_mps, self.accel_overall)
+        return "[chkpt] ride_id=%d geo: n=%.2f e=%.2f ; ts=%ds accel m/s2: X=%.2f Y=%.2f Z=%.2f ; accel_overall=%.2fm/s2 speed=%.2fm/s" % (self.ride_id, self.geo_coord[0], self.geo_coord[1], self.timestamp, self.accel_x_mps, self.accel_y_mps, self.accel_z_mps, self.accel_overall, self.speed)
 
 class Drive:
-    def __init__(self, avgspeed, avgaccel, kilometers, starttime, endtime):
-        self.avgspeed = avgspeed
-        self.avgaccel = avgaccel
-        self.kilometers = kilometers
-        self.starttime = starttime
-        self.endtime = endtime
+    def __init__(self, checkpoints):
+        self.avgspeed = sum(map(lambda c: c.speed, checkpoints)) / len(checkpoints) # m/s
+        self.avgaccel = sum(map(lambda c: c.accel_overall, checkpoints)) / len(checkpoints) # m/s2
+        self.starttime = checkpoints[0].timestamp # s
+        self.endtime = checkpoints[-1].timestamp  # s
+        self.kilometers = float((self.endtime - self.starttime) * self.avgspeed) / 1000 # km
 
     def __str__(self):
         return "[drive] avgspeed=%fm/s avgaccel=%fm/s2 kilometers=%fkm starttime=%ds endtime=%ds" % (self.avgspeed, self.avgaccel, self.kilometers, self.starttime, self.endtime)
@@ -81,22 +93,28 @@ def get_data():
             checkpoints.append(checkpoint)
             print checkpoint
 
+            fig_accel_time_l1.data_source.data["y"] = \
+                fig_accel_time_l1.data_source.data["y"][1:] + [checkpoint.accel_overall]
+
+            fig_speed_time_l1.data_source.data["y"] = \
+                fig_speed_time_l1.data_source.data["y"][1:] + [checkpoint.speed]
+
             stream_buffer = ""
     except:
-        # end drive
         if len(checkpoints) > 0 and int(time.time()) - checkpoints[-1].timestamp > 5:
-            avgspeed = sum(map(lambda x: x.speed, checkpoints)) / len(checkpoints) # m/s
-            avgaccel = sum(map(lambda x: x.accel_overall, checkpoints)) / len(checkpoints) # m/s2
-            starttime = checkpoints[0].timestamp # s
-            endtime = checkpoints[-1].timestamp  # s
-            kilometers = float((endtime - starttime) * avgspeed) / 1000 # km
+            # end drive
+            if len(checkpoints) > 1:
+                drive = Drive(checkpoints)
+                drives.append(drive)
+                print drive
 
-            drive = Drive(avgspeed, avgaccel, kilometers, starttime, endtime)
-            drives.append(drive)
-            print drive
-
-            # clear
+            # clear data points
             checkpoints = []
 
 # receive streamed data
-set_interval(get_data, 1)
+curdoc().add_periodic_callback(get_data, 1000)
+
+# open the bokeh document in a browser
+session.show(fig_accel_time)
+session.show(fig_speed_time)
+session.loop_until_closed()
