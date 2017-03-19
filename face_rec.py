@@ -23,7 +23,6 @@ while True:
     for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
         # See if the face is a match for the known face(s)
         match = face_recognition.compare_faces(known_faces_encodings, face_encoding)
-
         name = "Unknown"
         for i, m in enumerate(match):
             if m:
@@ -34,8 +33,7 @@ while True:
 
         # Draw a label with a name below the face
         cv2.rectangle(frame, (left, bottom - 35), (right, bottom), (0, 0, 255), 2)
-        font = cv2.FONT_HERSHEY_DUPLEX
-        cv2.putText(frame, name, (left + 6, bottom - 6), font, 1.0, (255, 255, 255), 1)
+        cv2.putText(frame, name, (left + 6, bottom - 6), cv2.FONT_HERSHEY_DUPLEX, 1.0, (255, 255, 255), 1)
 
     # Display the resulting image
     cv2.imshow('Insure Ride', frame)
