@@ -122,14 +122,24 @@ def get_data():
                 drives.append(drive)
                 print drive
 
+                fake_data = True
+
                 # send the data
                 carAddress = json.loads(requests.get(url='https://insureride.net/api/v1/user').text)["1"]["CarAddress"]
-                fakeEndTime = drive.endtime + (drive.endtime - drive.starttime) * 1000
-                fakeAvgSpeed = drive.avgspeed * 3600.0 / 1000.0 * 2 # km/h
+
+                fakeEndTime = drive.endtime # s
+                fakeAvgSpeed = drive.avgspeed * 3600.0 / 1000.0 # km/h
+                fakeAvgAccel = drive.avgaccel # m/s2
+
+                if fake_data:
+                    fakeEndTime = drive.endtime + (drive.endtime - drive.starttime) * 1000 # s
+                    fakeAvgSpeed = fakeAvgSpeed * 2 # km/h
+                    fakeAvgAccel = fakeAvgAccel * 2 # m/s2
+
                 print requests.post("https://insureride.net/api/v1/car/" + carAddress + "/drive", data = json.dumps({
-                    "Kilometers": fakeAvgSpeed * (fakeEndTime - drive.starttime) / 3600.0, # m // km
-                    "Avgspeed": fakeAvgSpeed, # m/s // km/h
-                    "Avgaccel": drive.avgaccel * 2, # m/s2
+                    "Kilometers": fakeAvgSpeed * (fakeEndTime - drive.starttime) / 3600.0, # km
+                    "Avgspeed": fakeAvgSpeed, # km/h
+                    "Avgaccel": fakeAvgAccel, # m/s2
                     "Starttime": drive.starttime,
                     "Endtime": fakeEndTime
                 })).text
