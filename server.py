@@ -105,9 +105,9 @@ def get_data():
                 # send the data
                 carAddress = json.loads(requests.get(url='https://insureride.net/api/v1/user').text)["1"]["CarAddress"]
                 print requests.post("https://insureride.net/api/v1/car/" + carAddress + "/drive", data = json.dumps({
-                    "Kilometers": drive.kilometers,
-                    "Avgspeed": drive.avgspeed,
-                    "Avgaccel": drive.avgaccel,
+                    "Kilometers": drive.kilometers * 100,
+                    "Avgspeed": drive.avgspeed * 2,
+                    "Avgaccel": drive.avgaccel * 2,
                     "Starttime": drive.starttime,
                     "Endtime": drive.endtime
                 })).text
