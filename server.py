@@ -8,6 +8,8 @@ from bokeh.client import push_session
 from bokeh.driving import cosine
 from bokeh.plotting import figure, curdoc
 from bokeh.models import ColumnDataSource
+import logging as log
+import datetime
 
 UDP_IP = "0.0.0.0"
 UDP_PORT = 6666
@@ -34,6 +36,12 @@ fig_speed_time = figure(height=300, width=1024, x_axis_label="time s", y_axis_la
 fig_speed_time_l1 = fig_speed_time.line([i/10.0 for i in range(-100, 1)], [0 for i in range(101)], color="blue")
 
 session = push_session(curdoc())
+
+# logging
+logFile = open("log.txt", "a")
+
+def get_log_ts():
+    return datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S ')
 
 class Checkpoint:
     def __init__(self, ride_id, geo_coord, timestamp, accel_x_mg, accel_y_mg, accel_z_mg, accel_delta, ts_delta):
@@ -109,6 +117,7 @@ def get_data():
                             accel_x_mg, accel_y_mg, accel_z_mg, accel_delta, ts_delta)
             checkpoints.append(checkpoint)
             print checkpoint
+            logFile.write(get_log_ts() + str(checkpoint))
 
             next_y_accel = checkpoint.accel_delta
             next_y_speed = checkpoint.speed
@@ -121,6 +130,7 @@ def get_data():
                 drive = Drive(checkpoints)
                 drives.append(drive)
                 print drive
+                logFile.write(get_log_ts() + str(drive))
 
                 fake_data = True
 
@@ -146,6 +156,7 @@ def get_data():
 
             # clear data points
             checkpoints = []
+            logFile.write(get_log_ts() + "[clear_checkpoints]")
 
     fig_accel_time_l1.data_source.data["y"] = \
         fig_accel_time_l1.data_source.data["y"][1:] + [next_y_accel]
