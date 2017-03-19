@@ -8,13 +8,11 @@ from bokeh.client import push_session
 from bokeh.driving import cosine
 from bokeh.plotting import figure, curdoc
 from bokeh.models import ColumnDataSource
-import cv2, dlib
 
 UDP_IP = "0.0.0.0"
 UDP_PORT = 6666
 ACCEL_INTERVAL = 0.1 # s
 GET_STREAM_INTERVAL = ACCEL_INTERVAL * 1000 / 2 # ms
-FACE_DETECT_INTERVAL = 1000 # ms
 NUM_STREAMED_VALS = 7 # values
 STREAMED_VAL_SIZE = 4 # bytes per value
 
@@ -29,18 +27,13 @@ checkpoints = []
 drives = []
 
 # plotting
-fig_accel_time = figure(height=200, width=800, x_axis_label="time s", y_axis_label="acceleration m/s^2")
+fig_accel_time = figure(height=300, width=1024, x_axis_label="time s", y_axis_label="acceleration m/s^2")
 fig_accel_time_l1 = fig_accel_time.line([i/10.0 for i in range(-100, 1)], [0 for i in range(101)], color="firebrick")
 
-fig_speed_time = figure(height=200, width=800, x_axis_label="time s", y_axis_label="speed m/s")
+fig_speed_time = figure(height=300, width=1024, x_axis_label="time s", y_axis_label="speed m/s")
 fig_speed_time_l1 = fig_speed_time.line([i/10.0 for i in range(-100, 1)], [0 for i in range(101)], color="blue")
 
 session = push_session(curdoc())
-
-# face recognition
-video_capture = cv2.VideoCapture(0)
-detector = dlib.get_frontal_face_detector()
-predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
 
 class Checkpoint:
     def __init__(self, ride_id, geo_coord, timestamp, accel_x_mg, accel_y_mg, accel_z_mg):
@@ -128,30 +121,8 @@ def get_data():
     fig_speed_time_l1.data_source.data["y"] = \
         fig_speed_time_l1.data_source.data["y"][1:] + [next_y_speed]
 
-def detect_faces():
-    # capture
-    ret, frame = video_capture.read()
-
-    # optimise
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-    clahe_image = clahe.apply(gray)
-
-    # detect
-    detections = detector(clahe_image, 1)
-    for k,d in enumerate(detections):
-        shape = predictor(clahe_image, d)
-        for i in range(1,68):
-            cv2.circle(frame, (shape.part(i).x, shape.part(i).y), 1, (0,0,255), thickness=2)
-
-    # print to disk
-    cv2.imwrite("face_recog.jpg", frame)
-
 # receive streamed data
 curdoc().add_periodic_callback(get_data, GET_STREAM_INTERVAL)
-
-# stream webcam faces
-curdoc().add_periodic_callback(detect_faces, FACE_DETECT_INTERVAL)
 
 # open the bokeh document in a browser
 session.show(fig_accel_time)
