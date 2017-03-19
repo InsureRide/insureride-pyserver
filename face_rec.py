@@ -6,10 +6,15 @@ video_capture = cv2.VideoCapture(0)
 
 # Load a sample picture and learn how to recognize it.
 known_faces = [
-    face_recognition.load_image_file("known_people/alex.jpg")
+    face_recognition.load_image_file("known_people/alex.jpg"),
+    face_recognition.load_image_file("known_people/moriz.jpg"),
+    face_recognition.load_image_file("known_people/joe.jpg"),
+    face_recognition.load_image_file("known_people/staffan.jpg"),
+    face_recognition.load_image_file("known_people/jonathan.jpg"),
+    face_recognition.load_image_file("known_people/terence.jpg")
 ]
 known_faces_encodings = [face_recognition.face_encodings(img)[0] for img in known_faces]
-known_faces_names = ["Alex"]
+known_faces_names = ["Alex", "Moriz", "Joe", "Staffan Davidsson", "Jonathan Anesand", "Terence"]
 
 while True:
     # Grab a single frame of video
