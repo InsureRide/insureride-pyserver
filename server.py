@@ -36,10 +36,11 @@ fig_speed_time_l1 = fig_speed_time.line([i/10.0 for i in range(-100, 1)], [0 for
 session = push_session(curdoc())
 
 class Checkpoint:
-    def __init__(self, ride_id, geo_coord, timestamp, accel_x_mg, accel_y_mg, accel_z_mg):
+    def __init__(self, ride_id, geo_coord, timestamp, accel_x_mg, accel_y_mg, accel_z_mg, accel_delta, ts_delta):
         self.ride_id = ride_id
         self.geo_coord = geo_coord
         self.timestamp = timestamp
+        self.ts_delta = ts_delta
 
         g = 9.8
         self.accel_x_mps = abs(accel_x_mg * g / 1000)
@@ -49,15 +50,16 @@ class Checkpoint:
         self.accel_overall = sqrt(self.accel_x_mps**2 + self.accel_y_mps**2)
         self.accel_overall = sqrt(self.accel_overall**2 + self.accel_z_mps**2)
 
-        self.speed = self.accel_overall * ACCEL_INTERVAL
+        self.speed = self.accel_overall
+        self.accel_delta = accel_delta
 
     def __str__(self):
-        return "[chkpt] ride_id=%d geo: n=%.2f e=%.2f ; ts=%ds accel m/s2: X=%.2f Y=%.2f Z=%.2f ; accel_overall=%.2fm/s2 speed=%.2fm/s" % (self.ride_id, self.geo_coord[0], self.geo_coord[1], self.timestamp, self.accel_x_mps, self.accel_y_mps, self.accel_z_mps, self.accel_overall, self.speed)
+        return "[chkpt] ride_id=%d geo: n=%.2f e=%.2f ; ts=%ds accel m/s2: X=%.2f Y=%.2f Z=%.2f ; accel_overall=%.2fm/s2 accel=%.2fm/s2 speed=%.2fm/s" % (self.ride_id, self.geo_coord[0], self.geo_coord[1], self.timestamp, self.accel_x_mps, self.accel_y_mps, self.accel_z_mps, self.accel_overall, self.accel_delta, self.speed)
 
 class Drive:
     def __init__(self, checkpoints):
         self.avgspeed = sum(map(lambda c: c.speed, checkpoints)) / len(checkpoints) # m/s
-        self.avgaccel = sum(map(lambda c: c.accel_overall, checkpoints)) / len(checkpoints) # m/s2
+        self.avgaccel = sum(map(lambda c: c.accel_delta, checkpoints)) / len(checkpoints) # m/s2
         self.starttime = checkpoints[0].timestamp # s
         self.endtime = checkpoints[-1].timestamp  # s
         self.kilometers = float((self.endtime - self.starttime) * self.avgspeed) / 1000 # km
@@ -85,12 +87,30 @@ def get_data():
 
             geo_coord = (47.25, 9.22) # N,E for St. Gallen
             timestamp = int(time.time())
+            accel_delta = 0
 
-            checkpoint = Checkpoint(ride_id, geo_coord, timestamp, accel_x_mg, accel_y_mg, accel_z_mg)
+            g = 9.8
+            accel_x_mps = abs(accel_x_mg * g / 1000)
+            accel_y_mps = abs(accel_y_mg * g / 1000)
+            accel_z_mps = abs(accel_z_mg * g / 1000)
+
+            accel_overall = sqrt(accel_x_mps**2 + accel_y_mps**2)
+            accel_overall = sqrt(accel_overall**2 + accel_z_mps**2)
+
+            if len(checkpoints) > 0:
+                prev_chkpt = checkpoints[-1]
+                i = len(checkpoints) - 1 # index of prev_chkpt in checkpoints
+                while i > 0 and ts_delta - prev_chkpt.ts_delta < 1000:
+                    i = i - 1
+                    prev_chkpt = checkpoints[i]
+                    accel_delta = abs(accel_overall - prev_chkpt.accel_overall)
+
+            checkpoint = Checkpoint(ride_id, geo_coord, timestamp,
+                            accel_x_mg, accel_y_mg, accel_z_mg, accel_delta, ts_delta)
             checkpoints.append(checkpoint)
             print checkpoint
 
-            next_y_accel = checkpoint.accel_overall
+            next_y_accel = checkpoint.accel_delta
             next_y_speed = checkpoint.speed
 
             stream_buffer = ""
@@ -104,12 +124,14 @@ def get_data():
 
                 # send the data
                 carAddress = json.loads(requests.get(url='https://insureride.net/api/v1/user').text)["1"]["CarAddress"]
+                fakeEndTime = drive.endtime + (drive.endtime - drive.starttime) * 1000
+                fakeAvgSpeed = drive.avgspeed * 3600.0 / 1000.0 * 2 # km/h
                 print requests.post("https://insureride.net/api/v1/car/" + carAddress + "/drive", data = json.dumps({
-                    "Kilometers": drive.kilometers * 100,
-                    "Avgspeed": drive.avgspeed * 2,
-                    "Avgaccel": drive.avgaccel * 2,
+                    "Kilometers": fakeAvgSpeed * (fakeEndTime - drive.starttime) / 3600.0, # m // km
+                    "Avgspeed": fakeAvgSpeed, # m/s // km/h
+                    "Avgaccel": drive.avgaccel * 2, # m/s2
                     "Starttime": drive.starttime,
-                    "Endtime": drive.endtime
+                    "Endtime": fakeEndTime
                 })).text
 
             # clear data points
